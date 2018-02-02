@@ -1,6 +1,6 @@
-# compojure-and-spec
+# experiment-server
 
-An example of using compojure-api and spec together to create a documented REST API.
+An experiment.
 
 
 ## Copyright and License
