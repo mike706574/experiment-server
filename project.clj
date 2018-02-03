@@ -9,6 +9,7 @@
                  [org.clojure/core.cache "0.6.5"]
                  [org.clojure/data.json "0.2.6"]
                  [org.clojure/math.numeric-tower "0.0.4"]
+                 [org.clojure/core.match "0.3.0-alpha5"]
                  [com.stuartsierra/component "0.3.2"]
 
                  ;; Utility

@@ -38,15 +38,20 @@
               (ms/close! stream)
               (log/error e "error in 'periodically' callback"))))))))
 
-(def newsapi-time-format (time-format/formatter "yyyy-MM-dd'T'HH:mm:ss'Z'"))
-(def parse-time (partial time-format/parse newsapi-time-format))
+(def news-api-date-format (time-format/formatter "yyyy-MM-dd"))
+(def news-api-time-format (time-format/formatter "yyyy-MM-dd'T'HH:mm:ss'Z'"))
 
-(defn get-articles [fake-articles req]
-  (let [{:strs [from to]} (:params req)
+(defn parse-time [s]
+  (try
+    (time-format/parse news-api-date-format s)
+    (catch IllegalArgumentException ex
+      (time-format/parse news-api-time-format s))))
+
+(defn get-articles [fake-articles {params :params :as req}]
+  (log/trace (str "Retrieving articles based on the following criteria: " params))
+  (let [{:strs [from to page]} params
+        page (if page (Integer/parseInt page) 1)
         pred (fn [article]
-               (println "Raw published at:" (:publishedAt article))
-               (println "Raw from:" from)
-               (println "Raw to:" from)
                (let [from (some-> from parse-time)
                      to (some-> to parse-time)
                      published (parse-time (:publishedAt article))
@@ -56,16 +61,18 @@
                      before-to (if to
                                  (time/before? published to)
                                  true)]
-                 (println "From:" from)
-                 (println "To:" to)
-                 (println "Published:" published)
-                 (println after-from)
-                 (println before-to)
                  (and after-from before-to)))
-        articles (filter pred @fake-articles)]
+        all-articles @fake-articles
+        articles (->> all-articles
+                  (filter pred)
+                  (drop (* (dec page) 20))
+                  (take 20))]
+    (log/trace (str "Returning " (count articles) " of " (count all-articles) " articles."))
     {:status 200
      :headers {"content-type" "application/json"}
-     :body (json/write-str articles)}))
+     :body (json/write-str {:status "ok"
+                            :totalResults (count articles)
+                            :articles articles})}))
 
 (defn raw-fake-tweet [{:keys [text username]}]
   (-> {:text text
@@ -84,9 +91,11 @@
 
 (defn handler
   [{:keys [fake-tweet-bus]}]
-  (let [fake-articles (atom [])
+  (let [fake-tweets (atom [])
+        fake-articles (atom [])
         get-articles (partial get-articles fake-articles)]
     (compojure/routes
+
      (POST "/fake/tweets/streaming" req
           (let [stream (ms/stream 1)]
             (periodically stream 9000 9000 (constantly "\r\n"))
@@ -95,20 +104,30 @@
              :headers {"content-type" "text/plain"}
              :body stream}))
 
-     (POST "/fake/tweets" {body :body}
-           (if-let [error (s/explain-data :twitter/tweet body)]
+     (POST "/fake/tweets" {fake-tweet :body}
+           (if-let [error (s/explain-data :twitter/tweet fake-tweet)]
              {:status 400
               :headers {"content-type" "application/json"}
               :body (json/write-str error)}
-             (let [fake-tweet (raw-fake-tweet body)]
+             (do
                (log/debug (str "Sending fake tweet:" fake-tweet))
-               (send-fake-tweet fake-tweet-bus body)
+               (send-fake-tweet fake-tweet-bus fake-tweet)
+               (swap! fake-tweets conj fake-tweet)
                {:status 201})))
 
+     (GET "/fake/tweets" req
+          {:status 200
+           :headers {"content-type" "application/json"}
+           :body (json/write-str {:tweets @fake-tweets})})
+
      (GET "/fake/articles" [] get-articles)
+
      (GET "/fake/articles/everything" [] get-articles)
+
      (POST "/fake/articles" {:keys [body]}
-           (let [article (json/read-str (slurp body) :key-fn keyword)]
+           (let [article (if (nil? (:publishedAt body))
+                           (assoc body :publishedAt (time-format/unparse news-api-time-format (time/now)))
+                           body)]
              (swap! fake-articles conj article)
              {:status 201}))
      (route/not-found "No such page."))))

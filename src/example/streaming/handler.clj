@@ -36,8 +36,40 @@
             (log/error e (str conn-label "Exception thrown while setting up connection."))
             {:status 500}))))))
 
+(defn everything-ws
+  [{:keys [tweet-bus news-api-bus conn-manager] :as deps} req]
+  (md/let-flow [conn (md/catch
+                         (http/websocket-connection req)
+                         (constantly nil))]
+    (if-not conn
+      (non-websocket-response)
+      (let [conn-id (conn/add! conn-manager :menu conn)
+            conn-label (str "[ws-conn-" conn-id "] ")]
+        (log/debug (str conn-label "Tweet websocket connection established."))
+        (try
+          (ms/connect-via
+           (mb/subscribe tweet-bus :all)
+           (fn [tweet]
+             (let [message (json/write-str {:type :tweet :body tweet})]
+               (log/debug (str "Sending message: " message))
+               (println (str "Sending message: " message))
+               (spit "foo.txt" message)
+               (ms/put! conn message)))
+           conn)
+          (ms/connect-via
+           (mb/subscribe news-api-bus :all)
+           (fn [article]
+             (let [message (json/write-str {:type :article :body article})]
+               (log/debug (str "Sending message: " message))
+               (ms/put! conn message)))
+           conn)
+          {:status 101}
+          (catch Exception e
+            (log/error e (str conn-label "Exception thrown while setting up connection."))
+            {:status 500}))))))
+
 (defn handler
   [deps]
   (compojure/routes
-   (GET "/streaming/tweets" [] (partial tweet-ws deps))
+   (GET "/streaming/everything" [] (partial everything-ws deps))
    (route/not-found "No such page.")))

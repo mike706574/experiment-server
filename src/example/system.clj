@@ -6,6 +6,11 @@
             [example.users :as users]
             [example.util :as util]
 
+            [example.news-api.client :as news-api-client]
+            [example.news-api.consumer :as news-api-consumer]
+            [example.news-api.daemon :as news-api-daemon]
+            [example.news-api.repo :as news-api-repo]
+
             [example.twitter.consumer :as tweet-consumer]
             [example.twitter.daemon :as tweet-daemon]
             [example.twitter.repo :as tweet-repo]
@@ -54,6 +59,16 @@
    :tweet-stream (ms/stream)
    :tweet-repo (tweet-repo/atomic config)
    :tweet-bus (mb/event-bus)
+
+   :news-api-params (atom {:language "en"
+                           :q "apple"
+                           :sources "the-wall-street-journal,reuters,financial-times,the-economist"})
+   :news-api-client (news-api-client/client config)
+   :news-api-daemon (news-api-daemon/daemon config)
+   :news-api-consumer (news-api-consumer/consumer config)
+   :news-api-stream (ms/stream)
+   :news-api-repo (news-api-repo/atomic config)
+   :news-api-bus (mb/event-bus)
 
    :conn-manager (conn/manager config)
 

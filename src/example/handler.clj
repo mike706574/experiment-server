@@ -30,7 +30,7 @@
                           "/streaming" :streaming
                           :not-found)
             handler (get handlers handler-key)]
-        (log/debug (str "Routing \"" uri "\" to " (name handler-key) "handler."))
+        (log/debug (str "Routing \"" uri "\" to " handler-key " handler."))
         (handler request)))))
 
 (defn wrap-logging
@@ -51,7 +51,7 @@
   "Builds a request handler."
   (handler [this]))
 
-(defrecord ExampleHandlerFactory [tweet-repo tweet-bus fake-tweet-bus conn-manager]
+(defrecord ExampleHandlerFactory [tweet-repo tweet-bus news-api-bus fake-tweet-bus conn-manager]
   HandlerFactory
   (handler [this]
     (-> this
@@ -64,4 +64,4 @@
   [config]
   (component/using
    (map->ExampleHandlerFactory {})
-   [:tweet-repo :tweet-bus :fake-tweet-bus :conn-manager]))
+   [:tweet-repo :tweet-bus :news-api-bus :fake-tweet-bus :conn-manager]))

@@ -19,9 +19,11 @@
                               (slurp body))))
     response))
 
+;; TODO: This might make 1 more call than necessary, depending on
+;; how paging is implemented by the endpoint.
 (defn lazy-pages
   ([get-page]
-   (lazy-pages get-page 1 []))
+   (lazy-pages get-page 0 []))
 
   ([get-page num]
    (lazy-pages get-page num []))
@@ -35,3 +37,6 @@
       (cons (first page) (lazy-pages get-page num (rest page)))))))
 
 (defn flip [f] (fn [x y & args] (apply f y x args)))
+
+(defn rand-str [len]
+  (apply str (take len (repeatedly #(char (+ (rand 26) 65))))))

@@ -44,6 +44,7 @@
     #(ms/filter (complement str/blank?) %)
     #(connect-streams chunk-stream %)))
 
+;; TODO: md/future
 (defn start-daemon [url creds query-params chunk-stream]
   (future
     (Thread/sleep 500)
@@ -72,6 +73,7 @@
               (Thread/sleep wait)
               (md/recur (inc attempt)))
             (log/error "Unexpected exception." ex)))))))
+
 
 (defn process-chunk
   [buffer tweet-stream chunk]
