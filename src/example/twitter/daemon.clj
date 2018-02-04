@@ -45,36 +45,36 @@
     #(connect-streams % sink)))
 
 ;; TODO: md/future
+(defn error-desc [ex]
+  (if (instance? java.net.ConnectException ex)
+    "Connection refused"
+    (when-let [status (:status (ex-data ex))]
+      (case status
+        416 "Rate limited"
+        500 "Server error"
+        (str "Failed with status " status)))))
+
 (defn start-daemon [url creds query-params control sink]
-  (md/loop [attempts 0]
-    (try
-      (if (ms/closed? sink)
-        (log/info "Stream closed - terminating.")
-        (let [thing @(md/alt (ms/take! control ::drained)
-                             (connect url creds query-params sink))]
-          (case thing
-            ::stop (log/info "Stopped.")
-            ::drained (log/info "Drained.")
-            (do (log/info "Disconnected.")
-                (md/recur 0)))))
-      (catch java.net.ConnectException ex
-        (let [wait (* attempts 1000)]
-          (log/debug (str "Connection refused - reconnecting in " wait " milliseconds (attempt #" (inc attempts) ")."))
-          (Thread/sleep wait)
-          (md/recur (inc attempts))))
-      (catch InterruptedException e
-        (log/debug "Terminating."))
-      (catch Exception ex
-        (if-let [{:keys [status] :as data} (ex-data ex)]
-          (let [error-desc (case status
-                             416 "Rate limited"
-                             500 "Server error"
-                             (str "Failed with status " status))
-                wait (* 1000 (math/expt 2 attempts))]
-            (log/debug (str error-desc " - reconnecting in " wait " milliseconds (attempt #" (inc attempts) ")."))
-            (Thread/sleep wait)
-            (md/recur (inc attempts)))
-          (log/error "Unexpected exception." ex))))))
+  (md/loop [attempts 1]
+    (-> (md/alt (ms/take! control ::drained)
+                (connect url creds query-params sink))
+        (md/chain (fn [msg]
+                    (println "Message:" msg)
+                    (case msg
+                      ::drained (log/info "Drained - terminating.")
+                      (do (log/info "Disconnected - attempting to reconnect.")
+                          (md/recur 1)))))
+        (md/catch Exception
+            (fn [ex]
+              (if-let [error-desc (error-desc ex)]
+                (let [wait (* 1000 (math/expt 2 attempts))]
+                  (log/debug (str error-desc " - reconnecting in " wait " milliseconds (attempt #" (inc attempts) ")."))
+                  (d/chain (ms/try-take! control ::drained wait ::timeout)
+                    (fn [msg]
+                      (case msg
+                        ::timeout (md/recur (inc attempts))
+                        ::drained (log/debug "Drained - terminating.")))))
+                (log/error ex "Unexpected exception.")))))))
 
 (defn process-chunk
   [buffer tweet-stream chunk]

@@ -20,13 +20,13 @@
     (doseq [article articles] (ms/put! sink article))))
 
 (defn start-daemon [interval retries control f]
-  (md/loop [attempts 0]
+  (md/loop [attempts 1]
     (-> (md/future (f))
         (md/chain
             (fn [_] (ms/try-take! control ::drained interval ::timeout))
             (fn [msg]
               (case msg
-                ::timeout (md/recur 0)
+                ::timeout (md/recur 1)
                 ::drained (log/debug "Drained - terminating."))))
         (md/catch Exception
             (fn [ex]
