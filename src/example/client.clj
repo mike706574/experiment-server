@@ -15,12 +15,12 @@
 
 (defn get-token
   [host credentials]
-  (let [response (-> @(http/post (str (http-url host) "/api/tokens")
-                                              {:headers {"Content-Type" "application/json"
-                                                         "Accept" "text/plain"}
-                                               :body (json/write-str credentials)
-                                               :throw-exceptions false})
-                     (util/parse-json-body))]
+  (let [response (util/parse-json-body
+                  @(http/post (str (http-url host) "/api/tokens")
+                              {:headers {"Content-Type" "application/json"
+                                         "Accept" "text/plain"}
+                               :body (json/write-str credentials)
+                               :throw-exceptions false}))]
     (case (:status response)
       201 (-> response :body :token)
       401 nil
@@ -38,12 +38,11 @@
       (assoc this :token token)))
 
   (greeting [this name]
-    (-> @(http/get (str (http-url host) (str "/api/greetings"))
-                                {:headers {"Content-Type" "application/json"
-                                           "Accept" "application/json"}
-                                 :query-params {"name" name}
-                                 :throw-exceptions false})
-        (util/parse-json-body))))
+    (util/parse-json-body @(http/get (str (http-url host) (str "/api/greetings"))
+                                     {:headers {"Content-Type" "application/json"
+                                                "Accept" "application/json"}
+                                      :query-params {"name" name}
+                                      :throw-exceptions false}))))
 
 (defn client
   [{:keys [host content-type]}]

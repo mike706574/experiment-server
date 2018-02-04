@@ -23,9 +23,8 @@
                       (ms/put! stream (f)))]
               (if (realized? d)
                 (when-not @d
-                  (do
-                    (@cancel)
-                    (ms/close! stream)))
+                  (@cancel)
+                  (ms/close! stream))
                 (do
                   (@cancel)
                   (md/chain' d

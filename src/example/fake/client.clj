@@ -11,14 +11,13 @@
 
 (defn add-article [url article]
   (let [timestamped-article (assoc article :publishedAt (unparse (time/now)))]
-    (-> @(http/post (str url "/articles") {:headers {:content-type "application/json"}
+    (util/parse-json-body @(http/post (str url "/articles") {:headers {:content-type "application/json"}
                                            :body (json/write-str article)})
-        (util/parse-json-body))))
+        )))
 
 (defn get-articles [url article]
-  (let [timestamped-article (assoc article)]
-    (-> @(http/get (str url "/articles") {:headers {:content-type "application/json"}})
-        (util/parse-json-body))))
+  (-> @(http/get (str url "/articles") {:headers {:content-type "application/json"}})
+      (util/parse-json-body)))
 
 (defn add-tweet [url tweet]
   (-> @(http/post (str url "/tweets")

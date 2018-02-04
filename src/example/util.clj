@@ -39,4 +39,4 @@
 (defn flip [f] (fn [x y & args] (apply f y x args)))
 
 (defn rand-str [len]
-  (apply str (take len (repeatedly #(char (+ (rand 26) 65))))))
+  (str/join (take len (repeatedly #(char (+ (rand 26) 65))))))

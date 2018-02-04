@@ -54,7 +54,7 @@
   (configure-logging! config)
   {:authenticator (auth/authenticator config)
 
-   :twitter-daemon (tweet-daemon/daemon config)
+;;   :twitter-daemon (tweet-daemon/daemon config)
    :tweet-consumer (tweet-consumer/consumer config)
    :tweet-stream (ms/stream)
    :tweet-repo (tweet-repo/atomic config)
@@ -64,7 +64,7 @@
                            :q "apple"
                            :sources "the-wall-street-journal,reuters,financial-times,the-economist"})
    :news-api-client (news-api-client/client config)
-   :news-api-daemon (news-api-daemon/daemon config)
+;;   :news-api-daemon (news-api-daemon/daemon config)
    :news-api-consumer (news-api-consumer/consumer config)
    :news-api-stream (ms/stream)
    :news-api-repo (news-api-repo/atomic config)

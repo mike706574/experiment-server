@@ -21,12 +21,12 @@
 (def ^:private get-app-only-token (memoize request-app-only-token))
 
 (defprotocol Credentials
-  (auth-header [this request-method request-uri query]
+  (-auth-header [this request-method request-uri query]
     "Generate the string value for an Authorization HTTP header"))
 
 (defrecord AppCredentials [consumer-key consumer-secret]
   Credentials
-  (auth-header [_ _ _ _]
+  (-auth-header [_ _ _ _]
     (str "Bearer " (get-app-only-token consumer-key consumer-secret))))
 
 (defn env->AppCredentials
@@ -39,7 +39,7 @@
 
 (defrecord UserCredentials [consumer-key consumer-secret user-token user-token-secret]
   Credentials
-  (auth-header [_ request-method request-uri query]
+  (-auth-header [_ request-method request-uri query]
     (-> (oauth/make-consumer consumer-key
                              consumer-secret
                              "https://twitter.com/oauth/request_token"
@@ -50,25 +50,6 @@
         (oauth/credentials user-token user-token-secret request-method request-uri query)
         (oauth/authorization-header "Twitter API"))))
 
-; overwrite defrecord-supplied constructor with version adding pre-conditions
-; see (pprint (macroexpand-1 (read-string (source-fn '->UserCredentials))))
-(defn ->UserCredentials
-  "Positional factory function for class user.UserCredentials."
-  [consumer-key consumer-secret user-token user-token-secret]
-  {:pre [(some? consumer-key)
-         (some? consumer-secret)
-         (some? user-token)
-         (some? user-token-secret)]}
-  (new UserCredentials consumer-key consumer-secret user-token user-token-secret))
 
-(defn env->UserCredentials
-  "Create a UserCredentials instance from the environment variables:
-  CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, and ACCESS_TOKEN_SECRET"
-  []
-  (->> ["CONSUMER_KEY" "CONSUMER_SECRET" "ACCESS_TOKEN" "ACCESS_TOKEN_SECRET"]
-       (map #(System/getenv %))
-       (apply ->UserCredentials)))
-
-(defn read-creds [path] (map->UserCredentials (edn/read-string (slurp path))))
-
-(defn creds [config] (map->UserCredentials config))
+(defn auth-header [creds method url query-params]
+  (-auth-header (map->UserCredentials creds) method url query-params))

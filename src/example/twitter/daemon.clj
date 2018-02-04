@@ -23,15 +23,15 @@
                 :headers {"Authorization" auth-header}
                 :pool (http/connection-pool {:connection-options {:raw-stream? true}})})))
 
-(defn connect-streams [chunk-stream source-stream]
+(defn connect-streams [source sink]
   (log/info "Connection established.")
   (let [disc (md/deferred)]
-    (ms/connect source-stream chunk-stream {:upstream? true :downstream? false})
-    (ms/on-drained source-stream #(md/success! disc :disconnect))
+    (ms/connect source sink {:upstream? true :downstream? false})
+    (ms/on-drained source #(md/success! disc :disconnect))
     disc))
 
 (defn connect
-  [url creds query-params chunk-stream]
+  [url creds query-params sink]
   (md/chain (let [auth-header (auth/auth-header creds :post url query-params)]
               (http/post url
                          {:query-params query-params
@@ -40,40 +40,41 @@
     (fn [response] (log/spy :debug response))
     :body
     #(ms/map bs/to-string %)
-;;    #(ms/map (fn [chunk] (println (str "Chunk: |" chunk "|")) chunk) %)
+    ;;    #(ms/map (fn [chunk] (println (str "Chunk: |" chunk "|")) chunk) %)
     #(ms/filter (complement str/blank?) %)
-    #(connect-streams chunk-stream %)))
+    #(connect-streams % sink)))
 
 ;; TODO: md/future
-(defn start-daemon [url creds query-params chunk-stream]
-  (future
-    (Thread/sleep 500)
-    (md/loop [attempt 0]
-      (try
-        (if (ms/closed? chunk-stream)
-          (log/info "Stream closed - terminating.")
-          (do (let [disconnect @(connect url creds query-params chunk-stream)]
-                (log/info "Disconnected.")
-                (md/recur 0))))
-        (catch java.net.ConnectException ex
-          (let [wait (* attempt 1000)]
-            (log/debug (str "Connection refused - reconnecting in " wait " milliseconds (attempt #" (inc attempt) ")."))
+(defn start-daemon [url creds query-params control sink]
+  (md/loop [attempts 0]
+    (try
+      (if (ms/closed? sink)
+        (log/info "Stream closed - terminating.")
+        (let [thing @(md/alt (ms/take! control ::drained)
+                             (connect url creds query-params sink))]
+          (case thing
+            ::stop (log/info "Stopped.")
+            ::drained (log/info "Drained.")
+            (do (log/info "Disconnected.")
+                (md/recur 0)))))
+      (catch java.net.ConnectException ex
+        (let [wait (* attempts 1000)]
+          (log/debug (str "Connection refused - reconnecting in " wait " milliseconds (attempt #" (inc attempts) ")."))
+          (Thread/sleep wait)
+          (md/recur (inc attempts))))
+      (catch InterruptedException e
+        (log/debug "Terminating."))
+      (catch Exception ex
+        (if-let [{:keys [status] :as data} (ex-data ex)]
+          (let [error-desc (case status
+                             416 "Rate limited"
+                             500 "Server error"
+                             (str "Failed with status " status))
+                wait (* 1000 (math/expt 2 attempts))]
+            (log/debug (str error-desc " - reconnecting in " wait " milliseconds (attempt #" (inc attempts) ")."))
             (Thread/sleep wait)
-            (md/recur (inc attempt))))
-        (catch InterruptedException e
-          (log/debug "Terminating."))
-        (catch Exception ex
-          (if-let [{:keys [status] :as data} (ex-data ex)]
-            (let [error-desc (case status
-                               416 "Rate limited"
-                               500 "Server error"
-                               (str "Failed with status " status))
-                  wait (* 1000 (math/expt 2 attempt))]
-              (log/debug (str error-desc " - reconnecting in " wait " milliseconds (attempt #" (inc attempt) ")."))
-              (Thread/sleep wait)
-              (md/recur (inc attempt)))
-            (log/error "Unexpected exception." ex)))))))
-
+            (md/recur (inc attempts)))
+          (log/error "Unexpected exception." ex))))))
 
 (defn process-chunk
   [buffer tweet-stream chunk]
@@ -81,11 +82,11 @@
     (.append buffer chunk)
     (log/debug (str "Appending chunk: |"  chunk "|"))
     (when (str/ends-with? chunk "\r\n")
-      (let [raw-tweet (.toString buffer)
+      (let [raw-tweet (str buffer)
             {:keys [user text id] :as full-tweet} (json/read-str raw-tweet :key-fn keyword)
             tweet {:id id :username (:screen_name user) :text text}]
         (.setLength buffer 0)
-;;        (log/debug (str "Sending tweet: " tweet))
+        ;;        (log/debug (str "Sending tweet: " tweet))
         (ms/put! tweet-stream tweet)))
     (catch Exception ex
       (log/error ex "Error processing chunk."))))
@@ -103,7 +104,6 @@
       (do (log/info (str "Twitter daemon already started."))
           this)
       (let [source (chunk-stream sink)]
-        (def tacotown source)
         (log/info "Starting Twitter daemon.")
         (let [future (start-daemon url creds params source)]
           (assoc this :source source :future future)))))
@@ -111,7 +111,7 @@
     (if source
       (do (log/info "Stopping Twitter daemon...")
           (ms/close! source)
-          (future-cancel future)
+          @(future)
           (log/info "Stopped.")
           (assoc this :source nil))
       (do (log/info (str "Twitter daemon already stopped."))
@@ -124,7 +124,7 @@
   (let [{:keys [url creds params]} (:twitter-config config)]
     (component/using
      (map->TwitterDaemon {:url url
-                          :creds (auth/creds creds)
+                          :creds creds
                           :params params})
      {:sink :tweet-stream})))
 

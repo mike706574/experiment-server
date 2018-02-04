@@ -1,7 +1,7 @@
 (ns example.news-api.repo)
 
 (defn same-article? [a b]
-  (and (= (:title a)) (:title b)
+  (and (= (:title a) (:title b))
        (= (:publishedAt a) (:publishedAt b))
        (= (:source a) (:source b))))
 
