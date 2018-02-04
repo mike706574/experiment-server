@@ -27,7 +27,8 @@
             (fn [msg]
               (case msg
                 ::timeout (md/recur 1)
-                ::drained (log/debug "Drained - terminating."))))
+                ::drained (log/debug "Drained - terminating.")
+                (log/error (str "Unexpected message: " msg)))))
         (md/catch Exception
             (fn [ex]
               (log/error ex (str "Failed to retrieve News API articles (attempt " attempts " of " retries ")."))
@@ -37,24 +38,24 @@
                 (log/error "Retry attempts exhausted - terminating.")
                 (md/recur (inc attempts))))))))
 
-(defrecord NewsApiDaemon [client period interval retries sink params control future]
+(defrecord NewsApiDaemon [client period interval retries sink params control deferred]
   component/Lifecycle
   (start [this]
-    (if future
+    (if deferred
       (do (log/info (str "News API daemon already started."))
           this)
       (let [run (partial run client sink period @params)
             control (ms/stream)]
         (log/info "Starting News API daemon.")
-        (let [future (start-daemon interval retries control run)]
-          (assoc this :control control :future future)))))
+        (let [deferred (start-daemon interval retries control run)]
+          (assoc this :control control :deferred deferred)))))
   (stop [this]
-    (if future
+    (if deferred
       (do (log/info "Stopping News API daemon...")
           (ms/close! control)
-          @future
+          @deferred
           (log/info "Stopped.")
-          (assoc this :control nil :future nil))
+          (assoc this :control nil :deferred nil))
       (do (log/info (str "News API daemon already stopped."))
           this))))
 
