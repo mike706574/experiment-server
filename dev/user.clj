@@ -2,6 +2,8 @@
   "Tools for interactive development with the REPL. This file should
   not be included in a production build of the application."
   (:require
+   [clj-time.core :as time]
+   [clj-time.coerce :as coerce]
    [clj-time.format :as time-format]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
@@ -43,13 +45,12 @@
 
 (def tweet-url "https://stream.twitter.com/1.1/statuses/filter.json")
 
-(def fake-url (str "http://localhost:" port "/fake"))
-
-(def fake-tweet-url (str fake-url "/tweets/streaming"))
-
-(def fake-news-api-url (str fake-url "/articles"))
-
+(def news-api-url "https://newsapi.org/v2")
 (def news-api-key "58ef69549bf64f55a5dbdebefcdcf47f")
+
+(def fake-url (str "http://localhost:" port "/fake"))
+(def fake-tweet-url (str fake-url "/tweets/streaming"))
+(def fake-news-api-url (str fake-url "/articles"))
 
 (def config
   {:id "example-server"
@@ -60,7 +61,7 @@
    :users {"mike" "rocket"}
    :twitter-config {:url fake-tweet-url
                     :creds (edn/read-string (slurp "dev-resources/creds.edn"))
-                    :params {:track "puppy" :language "en"}}
+                    :params {:track "apple" :language "en"}}
    :news-api-config {:url fake-news-api-url
                      :api-key news-api-key
                      :period (* 60 60 1000)
@@ -134,11 +135,13 @@
 
   (fake-client/add-rand-apple-article fake-url)
 
+  (fake-client/add-rand-apple-tweet fake-url)
+
   (def tf
     (future
       (while true
         (Thread/sleep (+ 250 (rand-int 1500)))
-        (fake-client/add-rand-tweet fake-url))))
+        (fake-client/add-rand-apple-tweet fake-url))))
 
   (future-cancel tf)
 

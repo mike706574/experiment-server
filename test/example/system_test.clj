@@ -18,31 +18,15 @@
              :service/user-manager-type :atomic
              :service/users {"mike" "rocket"}})
 
-(deftest greeting
-  (with-system (system/system config)
-    (let [client (-> {:host (str "localhost:" port)
-                      :content-type "application/json"}
-                     (client/client))]
-      (unpack-response (client/greeting client "mike")
-        (is (= 200 status))
-        (is (= {:greeting "Hello, mike!"} body))))))
+(def client (-> {:host (str "localhost:" "8001")
+                 :content-type "application/json"}
+                (client/client)))
 
-(deftest authenticates-successfully
-  (with-system (system/system config)
-    (let [client (-> {:host (str "localhost:" port)
-                      :content-type "application/json"}
-                     (client/client)
-                     (client/authenticate {:username "mike"
-                                           :password "rocket"}))
-          token (:token client)]
-      (is (not (str/blank? token))))))
+(comment
 
-(deftest fails-to-authenticate
-  (with-system (system/system config)
-    (let [client (-> {:host (str "localhost:" port)
-                      :content-type "application/json"}
-                     (client/client)
-                     (client/authenticate {:username "mike"
-                                           :password "kablam"}))
-          token (:token client)]
-      (is (nil? token)))))
+
+  (client/articles client 2)
+  (client/tweets client 1)
+
+
+  )

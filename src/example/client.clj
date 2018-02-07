@@ -29,7 +29,8 @@
 
 (defprotocol Client
   (authenticate [this credentials])
-  (greeting [this name]))
+  (articles [this page-number])
+  (tweets [this page-number]))
 
 (defrecord ServiceClient [host token]
   Client
@@ -37,11 +38,18 @@
     (when-let [token (get-token host credentials)]
       (assoc this :token token)))
 
-  (greeting [this name]
-    (util/parse-json-body @(http/get (str (http-url host) (str "/api/greetings"))
+  (articles [this page-number]
+    (util/parse-json-body @(http/get (str (http-url host) (str "/api/articles"))
                                      {:headers {"Content-Type" "application/json"
                                                 "Accept" "application/json"}
-                                      :query-params {"name" name}
+                                      :query-params {"page-number" page-number}
+                                      :throw-exceptions false})))
+
+  (tweets [this page-number]
+    (util/parse-json-body @(http/get (str (http-url host) (str "/api/tweets"))
+                                     {:headers {"Content-Type" "application/json"
+                                                "Accept" "application/json"}
+                                      :query-params {"page-number" page-number}
                                       :throw-exceptions false}))))
 
 (defn client

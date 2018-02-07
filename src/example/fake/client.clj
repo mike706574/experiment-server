@@ -3,6 +3,7 @@
             [clj-time.core :as time]
             [clj-time.format :as time-format]
             [clojure.data.json :as json]
+            [clojure.java.io :as io]
             [example.util :as util]))
 
 (def time-format (time-format/formatter "yyyy-MM-dd'T'HH:mm:ss'Z'"))
@@ -39,3 +40,19 @@
 (defn add-rand-tweet [url]
   (add-tweet url {:username (util/rand-str (rand-nth (range 5 15)))
                   :text (util/rand-str (rand-nth (range 10 142)))}))
+
+(def apple-tweets
+  (->> "dev-resources/apple-tweets-1.json"
+       (io/reader)
+       (line-seq)
+       (map #(json/read-str % :key-fn keyword))))
+
+(defn add-rand-apple-tweet [url]
+  (add-tweet url (rand-nth apple-tweets)))
+
+
+  (->> "dev-resources/apple-tweets-1.json"
+       (io/reader)
+       (line-seq)
+       (rand-nth)
+       )

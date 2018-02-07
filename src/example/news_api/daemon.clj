@@ -16,7 +16,7 @@
         from (time/ago (time/seconds (/ period 1000)))
         params-with-range (assoc params :from (unparse from) :to (unparse to))
         articles (client/get-articles client params)]
-    (log/debug (str "Got " (count articles) " articles."))
+    (log/trace (str "Got " (count articles) " articles."))
     (doseq [article articles] (ms/put! sink article))))
 
 (defn start-daemon [interval retries control f]

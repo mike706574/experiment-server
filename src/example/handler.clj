@@ -9,29 +9,12 @@
                                               api-defaults]]
             [ring.middleware.json :refer [wrap-json-body]]
             [ring.middleware.params :refer [wrap-params]]
-            [ring.middleware.cors :refer [wrap-cors]]
             [taoensso.timbre :as log]))
 
 (defn not-found [req]
   {:status 404
    :headers {"content-type" "text/plain"}
    :body "Not found (root handler)."})
-
-(defn root-handler [deps]
-  (let [handlers {:api (api-handler/handler deps)
-                  :fake (fake-handler/handler deps)
-                  :streaming (streaming-handler/handler deps)
-                  :not-found not-found}]
-    (fn [request]
-      (let [uri (:uri request)
-            handler-key (condp (util/flip str/starts-with?) uri
-                          "/api" :api
-                          "/fake" :fake
-                          "/streaming" :streaming
-                          :not-found)
-            handler (get handlers handler-key)]
-        (log/debug (str "Routing \"" uri "\" to " handler-key " handler."))
-        (handler request)))))
 
 (defn wrap-logging
   [handler]
@@ -47,21 +30,42 @@
           (log/error e label)
           {:status 500})))))
 
+(defn root-handler [deps]
+  (let [handlers {:api (wrap-logging (api-handler/handler deps))
+                  :fake (fake-handler/handler deps)
+                  :streaming (wrap-logging (streaming-handler/handler deps))
+                  :not-found not-found}]
+    (fn [request]
+      (let [uri (:uri request)
+            handler-key (condp (util/flip str/starts-with?) uri
+                          "/api" :api
+                          "/fake" :fake
+                          "/streaming" :streaming
+                          :not-found)
+            handler (get handlers handler-key)]
+        (log/trace (str "Routing \"" uri "\" to " handler-key " handler."))
+        (handler request)))))
+
 (defprotocol HandlerFactory
   "Builds a request handler."
   (handler [this]))
 
-(defrecord ExampleHandlerFactory [tweet-repo tweet-bus news-api-bus fake-tweet-bus conn-manager]
+(defrecord ExampleHandlerFactory [news-api-bus
+                                  news-api-repo
+                                  tweet-repo
+                                  tweet-bus
+                                  fake-tweet-bus
+                                  conn-manager]
   HandlerFactory
   (handler [this]
     (-> this
         (root-handler)
         (wrap-params)
-        (wrap-json-body {:keywords? true})
-        (wrap-logging))))
+        (wrap-json-body {:keywords? true}))))
 
 (defn factory
   [config]
   (component/using
    (map->ExampleHandlerFactory {})
-   [:tweet-repo :tweet-bus :news-api-bus :fake-tweet-bus :conn-manager]))
+   [:conn-manager :fake-tweet-bus :news-api-bus
+    :news-api-repo :tweet-repo :tweet-bus]))

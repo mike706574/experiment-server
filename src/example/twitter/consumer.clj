@@ -1,19 +1,34 @@
 (ns example.twitter.consumer
-  (:require [com.stuartsierra.component :as component]
+  (:require [clj-time.coerce :as time-coerce]
+            [clj-time.format :as time-format]
+            [clojure.data.json :as json]
+            [com.stuartsierra.component :as component]
             [example.twitter.repo :as repo]
             [manifold.bus :as mb]
-            [manifold.stream :as ms]))
+            [manifold.stream :as ms]
+            [taoensso.timbre :as log]))
 
-(defn process-tweet
-  [repo bus tweet]
-  (println "Tweet: " tweet)
-  (repo/store! repo tweet)
-  (mb/publish! bus :all tweet))
+(def a-time-format (time-format/formatter "yyyy-MM-dd'T'HH:mm:ss'Z'"))
+
+(defn build [{:keys [user id text timestamp_ms]}]
+
+  {:id (str id)
+   :author (:screen_name user)
+   :text text
+   :published-at(time-format/unparse a-time-format (time-coerce/to-date timestamp_ms))})
+
+(defn process
+  [repo bus text]
+  (let [data (json/read-str text :key-fn keyword)
+        tweet (build data)]
+    (repo/store! repo tweet)
+    (mb/publish! bus :all tweet)
+    (log/trace (str "New tweet: " (:id tweet)))))
 
 (defrecord TweetConsumer [repo bus stream]
   component/Lifecycle
   (start [this]
-    (ms/consume (partial process-tweet repo bus) stream)
+    (ms/consume (partial process repo bus) stream)
     this)
   (stop [this]
     this))

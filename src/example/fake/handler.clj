@@ -109,7 +109,7 @@
               :headers {"content-type" "application/json"}
               :body (json/write-str error)}
              (do
-               (log/debug (str "Sending fake tweet:" fake-tweet))
+               (log/trace (str "Sending fake tweet: " fake-tweet))
                (send-fake-tweet fake-tweet-bus fake-tweet)
                (swap! fake-tweets conj fake-tweet)
                {:status 201})))

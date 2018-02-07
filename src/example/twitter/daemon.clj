@@ -47,19 +47,14 @@
     (.append buffer chunk)
     (log/trace (str "Appending chunk: |"  chunk "|"))
     (when (str/ends-with? chunk "\r\n")
-      (let [raw-tweet (str buffer)
-            {:keys [user text id] :as full-tweet} (json/read-str raw-tweet :key-fn keyword)
-            tweet {:id id :username (:screen_name user) :text text}]
-        (.setLength buffer 0)
-        (log/trace (str "Sending tweet: " tweet))
-        (ms/put! sink tweet)))
+      (log/trace "Tweet assembled.")
+      (ms/put! sink (str buffer))
+      (.setLength buffer 0))
     (catch Exception ex
       (log/error ex "Error processing chunk."))))
 
-(defn start-daemon [url creds query-params control sink]
-  (let [buffer (StringBuffer.)
-        process-chunk (partial process-chunk buffer sink)
-        stream (atom nil)]
+(defn start-daemon [url creds query-params control chunk-stream tweet-stream]
+  (let [stream (atom nil)]
     (md/loop [attempts 1]
       (-> (connect url creds query-params)
           (md/chain
@@ -67,7 +62,7 @@
               (log/info "Connection established.")
               (let [disconnect (md/deferred)]
                 (ms/on-drained source #(md/success! disconnect ::disconnect))
-                (ms/connect source sink {:upstream? true :downstream? false})
+                (ms/connect source chunk-stream {:upstream? true :downstream? false})
                 (reset! stream source)
                 (md/alt (ms/take! control ::drained) disconnect)))
             (fn [msg]
@@ -90,36 +85,36 @@
                           ::drained (log/debug "Drained - terminating.")))))
                   (log/error ex "Unexpected exception."))))))))
 
-(defn chunk-stream [tweet-stream]
+(defn new-chunk-stream [tweet-stream]
   (let [stream (ms/stream)]
     (ms/on-drained stream #(log/debug "Chunk stream drained."))
     (ms/consume (partial process-chunk (StringBuffer.) tweet-stream) stream)
     stream))
 
-(defrecord TwitterDaemon [url creds params sink source control deferred]
+(defrecord TwitterDaemon [url creds params tweet-stream chunk-stream control deferred]
   component/Lifecycle
   (start [this]
-    (if source
+    (if deferred
       (do (log/info (str "Twitter daemon already started."))
           this)
-      (let [source (chunk-stream sink)
+      (let [chunk-stream (new-chunk-stream tweet-stream)
             control (ms/stream)]
         (log/info "Starting Twitter daemon.")
-        (let [deferred (start-daemon url creds params control sink)]
-          (assoc this :source source :control control :deferred deferred)))))
+        (let [deferred (start-daemon url creds params control chunk-stream tweet-stream)]
+          (assoc this :chunk-stream chunk-stream :control control :deferred deferred)))))
   (stop [this]
-    (if source
+    (if deferred
       (do (log/info "Stopping Twitter daemon...")
-          (ms/close! source)
+          (ms/close! chunk-stream)
           (ms/close! control)
           @deferred
           (log/info "Stopped.")
-          (assoc this :source nil))
+          (assoc this :chunk-stream nil :control nil :deferred nil))
       (do (log/info (str "Twitter daemon already stopped."))
           this))))
 
-(defn handy-daemon [url creds params sink]
-  (map->TwitterDaemon {:url url :creds creds :params params :sink sink}))
+(defn handy-daemon [url creds params tweet-stream]
+  (map->TwitterDaemon {:url url :creds creds :params params :tweet-stream tweet-stream}))
 
 (defn daemon [config]
   (let [{:keys [url creds params]} (:twitter-config config)]
@@ -127,7 +122,7 @@
      (map->TwitterDaemon {:url url
                           :creds creds
                           :params params})
-     {:sink :tweet-stream})))
+     [:tweet-stream])))
 
 (s/def :twitter/url string?)
 

@@ -4,6 +4,7 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.math.numeric-tower :as math]
+            [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [com.stuartsierra.component :as component]
             [aleph.http :as http]
@@ -16,15 +17,23 @@
             [taoensso.timbre :as log]
             [example.news-api.repo :as repo]))
 
+(defn build [data]
+  (-> data
+      (update :source :id)
+      (set/rename-keys {:publishedAt :published-at
+                        :urlToImage :image-url})))
+
 (defn process-article
-  [repo bus article]
+  [repo bus data]
   (try
-    (log/debug "Processing article:" (:title article))
-    (if (repo/has? repo article)
-      (log/debug "I already have it!")
-      (let [tagged-article (repo/store! repo article)]
-        (log/debug (str "New article:" tagged-article))
-        (mb/publish! bus :all tagged-article)))
+    (log/trace (str "Processing article: " (:title data)))
+    (let [article (build data)]
+      (if (repo/has? repo article)
+        (log/trace "Article already processed.")
+        (let [tagged-article (repo/store! repo article)
+              {:keys [id title]} tagged-article]
+          (mb/publish! bus :all tagged-article)
+          (log/debug (str "New article: \"" title "\" (" id ")")))))
     (catch Exception ex
       (.printStackTrace ex))))
 
